@@ -21,9 +21,18 @@ def preprocess_sentence(w):
     return w
 
 def preprocess_sparql(s):
-
+    for pre_name, pre_url in re.findall(r"PREFIX\s([^:]*):\s<([^>]+)>", s):
+        s = re.sub(f"\\b{pre_name}:([^\\s]+)", f'<{pre_url}\\1>', s)
     # Remove prefixes
     s = re.sub(r"PREFIX\s[^\s]*\s[^\s]*", "", s)
+
+    # replace sing quote to double quote
+    s = re.sub(r"(\B')", '"', s)
+    s = re.sub(r"'([^_A-Za-z])", r'"\1', s)
+
+    # remove timezone 0
+    s = re.sub(r"(\d{4}-\d{2}-\d{2})T00:00:00Z", r'\1', s)
+
     s = encode(s.rstrip().strip())
 
     s = ' '.join(s.split())

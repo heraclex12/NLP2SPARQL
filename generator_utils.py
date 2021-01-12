@@ -63,21 +63,19 @@ def strip_brackets(s):
 
 
 REPLACEMENTS = [
-    ['dbo:', 'http://dbpedia.org/ontology/', 'dbo_'],
+    ['dbo:', 'onto:', 'http://dbpedia.org/ontology/', 'dbo_'],
     ['dbp:', 'http://dbpedia.org/property/', 'dbp_'],
     ['dbc:', 'http://dbpedia.org/resource/Category:', 'dbc_'],
     ['dbr:', 'res:', 'http://dbpedia.org/resource/', 'dbr_'],
     ['rdf:', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#', 'rdf_'],
     ['rdfs:', 'http://www.w3.org/2000/01/rdf-schema#', 'rdfs_'],
-    ['dct:', 'dct_'],
+    ['xsd:', 'http://www.w3.org/2001/XMLSchema#', 'xsd_'],
+    ['dct:', 'http://purl.org/dc/terms/', 'dct_'],
     ['geo:', 'geo_'],
-    ['georss:', 'georss_'],
-    ['rdf:', 'rdf_'],
-    ['rdfs:', 'rdfs_'],
-    ['foaf:', 'foaf_'],
-    ['owl:', 'owl_'],
-    ['yago:', 'yago_'],
-    ['skos:', 'skos_'],
+    ['foaf:', 'http://xmlns.com/foaf/0.1/', 'foaf_'],
+    ['owl:', 'http://www.w3.org/2002/07/owl#', 'owl_'],
+    ['yago:', 'http://dbpedia.org/class/yago/', 'yago_'],
+    ['skos:', 'http://www.w3.org/2004/02/skos/core#', 'skos_'],
     [' ( ', '  par_open  '],
     [' ) ', '  par_close  '],
     ['(', ' attr_open '],
@@ -90,8 +88,18 @@ REPLACEMENTS = [
     ['*', 'wildcard'],
     [' <= ', ' math_leq '],
     [' >= ', ' math_geq '],
+    [' != ', ' math_neq '],
+    [' = ', ' math_eql '],
     [' < ', ' math_lt '],
-    [' > ', ' math_gt ']
+    [' > ', ' math_gt '],
+    [' ; ', ' sep_semi '],
+    ['; ', ' sep_semi '],
+    ['"', " quote_str "],
+    [', ', ' sep_com '],
+    [' , ', ' sep_com '],
+    ['^^', ' str_type '],
+    [' ! ', ' bool_not '],
+    [' @en ', ' lang_en '],
 ]
 
 
