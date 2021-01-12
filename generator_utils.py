@@ -315,9 +315,11 @@ def decode ( encoded_sparql ):
 
 
 def normalize_predicates( sparql ):
+    sparql = re.sub(r"dbo_([A-Z])([a-zA-Z]+)", lambda matches: 'dbo_' + matches[1].lower() + matches[2], sparql)
     for standard in STANDARDS:
         for alternative in STANDARDS[standard]:
-            sparql = sparql.replace(alternative, standard)
+            sparql = re.sub(f'<{alternative}>', f'<{standard}>', sparql)
+            # sparql = sparql.replace(alternative, standard)
 
     return sparql
 
