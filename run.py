@@ -38,9 +38,11 @@ from tqdm import tqdm, trange
 from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
-                          RobertaConfig, RobertaModel, RobertaTokenizer)
+                          BertConfig, BertModel, BertTokenizer, RobertaConfig, RobertaModel, RobertaTokenizer)
 
-MODEL_CLASSES = {'roberta': (RobertaConfig, RobertaModel, RobertaTokenizer)}
+MODEL_CLASSES = {'bert': (BertConfig, BertModel, BertTokenizer),
+                 'roberta': (RobertaConfig, RobertaModel, RobertaTokenizer)
+                }
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
@@ -61,26 +63,20 @@ class Example(object):
         self.target = target
 
 
-def read_examples(filename):
+def read_examples(query_file, question_file):
     """Read examples from filename."""
     examples = []
-    with open(filename, encoding="utf-8") as f:
-        for idx, line in enumerate(f):
-            line = line.strip()
-            js = json.loads(line)
-            if 'idx' not in js:
-                js['idx'] = idx
-            code = ' '.join(js['code_tokens']).replace('\n', ' ')
-            code = ' '.join(code.strip().split())
-            nl = ' '.join(js['docstring_tokens']).replace('\n', '')
-            nl = ' '.join(nl.strip().split())
-            examples.append(
-                Example(
-                    idx=idx,
-                    source=code,
-                    target=nl,
-                )
+    with open(query_file, encoding="utf-8") as query_f:
+      with open(question_file, encoding='utf-8') as question_f:
+        for idx, data in enumerate(zip(query_f, question_f)):
+        query, question = data
+        examples.append(
+            Example(
+                idx=idx,
+                source=question.strip(),
+                target=query.strip(),
             )
+        )
     return examples
 
 
@@ -261,6 +257,8 @@ def main():
 
     # budild model
     encoder = model_class.from_pretrained(args.model_name_or_path, config=config)
+
+    # Create Transformer decoder
     decoder_layer = nn.TransformerDecoderLayer(d_model=config.hidden_size, nhead=config.num_attention_heads)
     decoder = nn.TransformerDecoder(decoder_layer, num_layers=6)
     model = Seq2Seq(encoder=encoder, decoder=decoder, config=config,
@@ -286,7 +284,7 @@ def main():
 
     if args.do_train:
         # Prepare training data loader
-        train_examples = read_examples(args.train_filename)
+        train_examples = read_examples(args.train_filename + '.sparql', args.train_filename + '.en')
         train_features = convert_examples_to_features(train_examples, tokenizer, args, stage='train')
         all_source_ids = torch.tensor([f.source_ids for f in train_features], dtype=torch.long)
         all_source_mask = torch.tensor([f.source_mask for f in train_features], dtype=torch.long)
@@ -359,7 +357,7 @@ def main():
                 if 'dev_loss' in dev_dataset:
                     eval_examples, eval_data = dev_dataset['dev_loss']
                 else:
-                    eval_examples = read_examples(args.dev_filename)
+                    eval_examples = read_examples(args.dev_filename + '.sparql', args.dev_filename + '.en')
                     eval_features = convert_examples_to_features(eval_examples, tokenizer, args, stage='dev')
                     all_source_ids = torch.tensor([f.source_ids for f in eval_features], dtype=torch.long)
                     all_source_mask = torch.tensor([f.source_mask for f in eval_features], dtype=torch.long)
@@ -419,7 +417,7 @@ def main():
                 if 'dev_bleu' in dev_dataset:
                     eval_examples, eval_data = dev_dataset['dev_bleu']
                 else:
-                    eval_examples = read_examples(args.dev_filename)
+                    eval_examples = read_examples(args.dev_filename + '.sparql', args.dev_filename + '.en')
                     eval_examples = random.sample(eval_examples, min(1000, len(eval_examples)))
                     eval_features = convert_examples_to_features(eval_examples, tokenizer, args, stage='test')
                     all_source_ids = torch.tensor([f.source_ids for f in eval_features], dtype=torch.long)
@@ -472,9 +470,9 @@ def main():
     if args.do_test:
         files = []
         if args.dev_filename is not None:
-            files.append(args.dev_filename)
+            files.append((args.dev_filename + '.sparql', args.dev_filename + '.en'))
         if args.test_filename is not None:
-            files.append(args.test_filename)
+            files.append((args.test_filename + '.sparql', args.test_filename + '.en'))
         for idx, file in enumerate(files):
             logger.info("Test file: {}".format(file))
             eval_examples = read_examples(file)
