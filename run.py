@@ -69,14 +69,14 @@ def read_examples(query_file, question_file):
     with open(query_file, encoding="utf-8") as query_f:
       with open(question_file, encoding='utf-8') as question_f:
         for idx, data in enumerate(zip(query_f, question_f)):
-        query, question = data
-        examples.append(
-            Example(
-                idx=idx,
-                source=question.strip(),
-                target=query.strip(),
-            )
-        )
+          query, question = data
+          examples.append(
+              Example(
+                  idx=idx,
+                  source=question.strip(),
+                  target=query.strip(),
+              )
+          )
     return examples
 
 
