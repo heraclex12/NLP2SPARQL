@@ -3,7 +3,7 @@
 
 import torch
 import torch.nn as nn
-import torch
+import torch.nn.functional as F
 from torch.autograd import Variable
 import copy
 
@@ -22,7 +22,7 @@ class Seq2Seq(nn.Module):
         * `eos_id`- end of symbol ids in target for beam search. 
     """
 
-    def __init__(self, encoder, decoder, config, beam_size=None, max_length=None, sos_id=None, eos_id=None):
+    def __init__(self, encoder, decoder, config, beam_size=None, max_length=None, sos_id=None, eos_id=None, label_smoothing=0.1):
         super(Seq2Seq, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
@@ -37,6 +37,7 @@ class Seq2Seq(nn.Module):
         self.max_length = max_length
         self.sos_id = sos_id
         self.eos_id = eos_id
+        self.label_smoothing = label_smoothing
 
     def _tie_or_clone_weights(self, first_module, second_module):
         """ Tie or clone module weights depending of weither we are using TorchScript or not
@@ -68,7 +69,8 @@ class Seq2Seq(nn.Module):
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = target_ids[..., 1:].contiguous()
             # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss(ignore_index=-1)
+            # loss_fct = nn.CrossEntropyLoss(ignore_index=-1)
+            loss_fct = LabelSmoothingCrossEntropy(epsilon=self.label_smoothing)
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1))[active_loss],
                             shift_labels.view(-1)[active_loss])
 
@@ -106,6 +108,28 @@ class Seq2Seq(nn.Module):
 
             preds = torch.cat(preds, 0)
             return preds
+
+
+def linear_combination(x, y, epsilon):
+    return epsilon * x + (1 - epsilon) * y
+
+
+def reduce_loss(loss, reduction='mean'):
+    return loss.mean() if reduction == 'mean' else loss.sum() if reduction == 'sum' else loss
+
+
+class LabelSmoothingCrossEntropy(nn.Module):
+    def __init__(self, epsilon: float = 0.1, reduction='mean'):
+        super().__init__()
+        self.epsilon = epsilon
+        self.reduction = reduction
+
+    def forward(self, preds, target):
+        n = preds.size()[-1]
+        log_preds = F.log_softmax(preds, dim=-1)
+        loss = reduce_loss(-log_preds.sum(dim=-1), self.reduction)
+        nll = F.nll_loss(log_preds, target, reduction=self.reduction)
+        return linear_combination(loss / n, nll, self.epsilon)
 
 
 class Beam(object):
