@@ -214,6 +214,8 @@ def main():
                         help="Epsilon for Adam optimizer.")
     parser.add_argument("--label_smoothing", default=0.1, type=float,
                         help="Label smoothing for CrossEntropyLoss")
+    parser.add_argument("--save_interval", default=0, type=int,
+                        help="Save a checkpoint and eval every N epochs")
     parser.add_argument("--max_grad_norm", default=1.0, type=float,
                         help="Max gradient norm.")
     parser.add_argument("--num_train_epochs", default=3, type=int,
@@ -351,7 +353,7 @@ def main():
                     scheduler.step()
                     global_step += 1
 
-            if args.do_eval:
+            if args.do_eval and (epoch + 1) % args.save_interval == 0:
                 # Eval model with dev dataset
                 tr_loss = 0
                 nb_tr_examples, nb_tr_steps = 0, 0
