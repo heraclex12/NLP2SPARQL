@@ -212,6 +212,8 @@ def main():
                         help="Weight deay if we apply some.")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float,
                         help="Epsilon for Adam optimizer.")
+    parser.add_argument("--label_smoothing", default=0.1, type=float,
+                        help="Label smoothing for CrossEntropyLoss")
     parser.add_argument("--max_grad_norm", default=1.0, type=float,
                         help="Max gradient norm.")
     parser.add_argument("--num_train_epochs", default=3, type=int,
@@ -263,7 +265,7 @@ def main():
     decoder = nn.TransformerDecoder(decoder_layer, num_layers=6)
     model = Seq2Seq(encoder=encoder, decoder=decoder, config=config,
                     beam_size=args.beam_size, max_length=args.max_target_length,
-                    sos_id=tokenizer.cls_token_id, eos_id=tokenizer.sep_token_id)
+                    sos_id=tokenizer.cls_token_id, eos_id=tokenizer.sep_token_id, label_smoothing=args.label_smoothing)
     if args.load_model_path is not None:
         logger.info("reload model from {}".format(args.load_model_path))
         model.load_state_dict(torch.load(args.load_model_path))
