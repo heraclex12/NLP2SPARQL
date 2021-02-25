@@ -46,10 +46,9 @@ shift $((OPTIND - 1))
 mkdir -p $DATA
 
 ### Convert the BERT vocabulary into fairseq one.
-cat $BERT_MODEL/vocab.txt \
-    | tail -n +5 \
-    | sed -e 's/$/ 0/' \
-	  > $DATA/dict.$SRC.txt
+python $CODE/create_bert_vocabulary.py \
+    --model=$BERT_MODEL \
+    > $DATA/dict.$SRC.txt
 
 ### Encode corpora into binary sets.
 python $CODE/preprocess.py \
