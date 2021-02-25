@@ -8,7 +8,7 @@ DIR=$(cd $(dirname $0); pwd)
 CODE=$DIR/nl2sparql
 export PYTHONPATH="$CODE:$PYTHONPATH"
 
-BERT_MODEL=$DIR/uncased_L-12_H-768_A-12
+BERT_MODEL=bert-base-uncased
 CORPUS=$DIR/corpus
 DATA=$DIR/data
 SRC=en

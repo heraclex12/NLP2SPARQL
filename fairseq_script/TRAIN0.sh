@@ -17,9 +17,9 @@ TRG=sparql
 # Download the corpus
 #
 mkdir -p $CORPUS
-cp ../drive/MyDrive/THESIS/tntspa/data/LC-QUAD/train.* $CORPUS
-cp ../drive/MyDrive/THESIS/tntspa/data/LC-QUAD/test.* $CORPUS
-cp ../drive/MyDrive/THESIS/tntspa/data/LC-QUAD/dev.* $CORPUS
+cp ../../drive/MyDrive/THESIS/tntspa/data/LC-QUAD/train.* $CORPUS
+cp ../../drive/MyDrive/THESIS/tntspa/data/LC-QUAD/test.* $CORPUS
+cp ../../drive/MyDrive/THESIS/tntspa/data/LC-QUAD/dev.* $CORPUS
 
 #
 # Train sub-word models
