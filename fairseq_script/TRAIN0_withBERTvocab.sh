@@ -8,7 +8,7 @@ DIR=$(cd $(dirname $0); pwd)
 CODE=$DIR/nl2sparql
 export PYTHONPATH="$CODE:$PYTHONPATH"
 
-BERT_MODEL=$DIR/uncased_L-12_H-768_A-12
+BERT_MODEL=$DIR/cased_L-12_H-768_A-12
 CORPUS=$DIR/corpus
 SRC=en
 TRG=sparql
@@ -25,8 +25,8 @@ cp ../../drive/MyDrive/THESIS/tntspa/data/LC-QUAD/dev.* $CORPUS
 # Download the BERT model
 #
 if [ ! -d $BERT_MODEL ]; then
-    wget https://storage.googleapis.com/bert_models/2018_10_18/uncased_L-12_H-768_A-12.zip
-    unzip uncased_L-12_H-768_A-12.zip
+    wget https://storage.googleapis.com/bert_models/2018_10_18/cased_L-12_H-768_A-12.zip
+    unzip cased_L-12_H-768_A-12.zip
     (cd $BERT_MODEL ; \
      ln -s bert_config.json config.json ; \
      transformers-cli convert --model_type bert \
@@ -35,36 +35,7 @@ if [ ! -d $BERT_MODEL ]; then
 	--pytorch_dump_output pytorch_model.bin)
 fi
 
-#
-# Train sub-word models
-#
 
-### sentencepiece
-sp_encode () {
-    lang=$1
-    size=$2
-    spm_train --model_prefix=$CORPUS/train.spm.$lang \
-	      --input=$CORPUS/train.$lang \
-	      --vocab_size=$size \
-	      --character_coverage=1.0 \
-	      > $CORPUS/train.spm.$lang.log 2>&1
-}
-
-sp_encode   $TRG 4000 &
-wait
-
-#
-# Apply the sub-word models
-#
-
-### sentencepiece
-sp_decode () {
-    lang=$1
-    testset=$2
-    cat $CORPUS/${testset}.$lang \
-	| spm_encode --model=$CORPUS/train.spm.$lang.model \
-	> $CORPUS/${testset}.bpe.$lang
-}
 
 ### BERT tokenizer
 bert_decode () {
@@ -78,7 +49,7 @@ bert_decode () {
 }
 
 for testset in train test dev; do
-    sp_decode   $TRG $testset &
+    bert_decode $TRG $testset $BERT_MODEL &
     bert_decode $SRC $testset $BERT_MODEL &
     wait
 done

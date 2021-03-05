@@ -8,7 +8,7 @@ DIR=$(cd $(dirname $0); pwd)
 CODE=$DIR/nl2sparql
 export PYTHONPATH="$CODE:$PYTHONPATH"
 
-BERT_MODEL=bert-base-uncased
+BERT_MODEL=$DIR/uncased_L-12_H-768_A-12
 CORPUS=$DIR/corpus
 DATA=$DIR/data
 SRC=en
@@ -46,9 +46,10 @@ shift $((OPTIND - 1))
 mkdir -p $DATA
 
 ### Convert the BERT vocabulary into fairseq one.
-python $CODE/create_bert_vocabulary.py \
-    --model=$BERT_MODEL \
-    > $DATA/dict.$SRC.txt
+cat $BERT_MODEL/vocab.txt \
+    | tail -n +5 \
+    | sed -e 's/$/ 0/' \
+	  > $DATA/dict.$SRC.txt
 
 ### Encode corpora into binary sets.
 python $CODE/preprocess.py \

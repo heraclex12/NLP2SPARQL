@@ -9,7 +9,7 @@ DIR=$(cd $(dirname $0); pwd)
 CODE=$DIR/nl2sparql
 export PYTHONPATH="$CODE:$PYTHONPATH"
 
-BERT_MODEL=bert-base-uncased
+BERT_MODEL=$DIR/uncased_L-12_H-768_A-12
 CORPUS=$DIR/corpus
 DATA=$DIR/data
 SRC=en
@@ -96,7 +96,7 @@ tuning () {
 	--dropout $DROPOUT \
 	--min-lr '1e-09' --lr-scheduler inverse_sqrt \
 	--weight-decay 0.0001 \
-  --valid-subset test \
+        --valid-subset valid \
 	--save-interval 100 \
 	--criterion label_smoothed_cross_entropy \
 	--warmup-updates 4000 --warmup-init-lr '1e-07' \
