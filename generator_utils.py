@@ -66,6 +66,23 @@ def strip_brackets(s):
     return s.strip().lower()
 
 
+SPARQL_KEYWORDS = {
+    'SELECT', 'CONSTRUCT', 'ASK', 'DESCRIBE', 'BIND', 'WHERE', 'LIMIT',
+    'VALUES', 'DISTINCT', 'AS', 'FILTER', 'ORDER', 'BY', 'SERVICE', 'OFFSET',
+    'NOT', 'EXISTS', 'OPTIONAL', 'UNION', 'FROM', 'GRAPH', 'NAMED', 'DESC',
+    'ASC', 'REDUCED', 'STR', 'LANG', 'LANGMATCHES', 'REGEX', 'BOUND', 'DATATYPE',
+    'ISBLANK', 'ISLITERAL', 'ISIRI', 'ISURI', 'GROUP_CONCAT', 'GROUP', 'DELETE', 'CLEAR',
+    'CREATE', 'COPY', 'DROP', 'INSERT', 'LOAD', 'DATA', 'INTO', 'WITH', 'ALL', 'SILENT',
+    'DEFAULT', 'USING', 'MD5', 'SHA1', 'SHA256', 'SHA384', 'SHA512', 'STRSTARTS',
+    'STRENDS', 'SAMETERM', 'ISNUMERIC', 'UCASE', 'SUBSTR', 'STRLEN', 'STRBEFORE', 'STRAFTER',
+    'REPLACE', 'LEVENSHTEIN_DIST', 'LCASE', 'ENCODE_FOR_URI', 'CONTAINS', 'CONCAT',
+    'COALESCE', 'CHOOSE_BY_MAX', 'CHOOSE_BY_MIN', 'YEAR', 'DAY', 'TZ', 'TIMEZONE', 'HOURS',
+    'MINUTES', 'MONTH', 'NOW', 'DUR_TO_USECS', 'SECONDS_DBL', 'USECS_TO_DUR', 'IF', 'MINUS',
+    'AVG', 'COUNT', 'MAX', 'MIN', 'SAMPLE', 'SUM', 'ABS', 'ADD', 'BASE', 'CEIL', 'COS', 'FLOOR',
+    'HAMMING_DIST', 'HAVERSINE_DIST', 'LN', 'LOG2', 'MOD', 'POWER', 'RADIANS', 'RAND',
+    'ROUND', 'ROUNDDOWN', 'ROUNDUP', 'TAN', 'VAR', 'VARP'
+}
+
 REPLACEMENTS = [
     ['dbo:', 'onto:', 'http://dbpedia.org/ontology/', 'dbo_'],
     ['dbp:', 'http://dbpedia.org/property/', 'dbp_'],
