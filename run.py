@@ -14,35 +14,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for language modeling on a text file (GPT, GPT-2, BERT, RoBERTa).
-GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while BERT and RoBERTa are fine-tuned
-using a masked language modeling (MLM) loss.
+Fine-tuning the library models for language modeling on a text file (BERT, RoBERTa).
+BERT and RoBERTa are fine-tuned using a masked language modeling (MLM) loss.
 """
 
 from __future__ import absolute_import
-import os
-import sys
-import bleu
-import pickle
-import torch
-import json
-import random
-import logging
-import argparse
-import numpy as np
-from io import open
-from itertools import cycle
-import torch.nn as nn
-from model import Seq2Seq
-from tqdm import tqdm, trange
-from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler, TensorDataset
-from torch.utils.data.distributed import DistributedSampler
-from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
-                          BertConfig, BertModel, BertTokenizer, RobertaConfig, RobertaModel, RobertaTokenizer)
 
-MODEL_CLASSES = {'bert': (BertConfig, BertModel, BertTokenizer),
-                 'roberta': (RobertaConfig, RobertaModel, RobertaTokenizer)
-                }
+import argparse
+import logging
+import os
+import random
+import re
+from io import open
+
+import numpy as np
+import torch
+import torch.nn as nn
+from nltk.translate.bleu_score import corpus_bleu
+from torch.utils.data import DataLoader, SequentialSampler, RandomSampler, TensorDataset
+from torch.utils.data.distributed import DistributedSampler
+from tqdm import tqdm
+from transformers import (AdamW, get_linear_schedule_with_warmup,
+                          RobertaConfig, RobertaModel, RobertaTokenizer, BertConfig, BertModel, BertTokenizer)
+
+import bleu
+from model import Seq2Seq, BertSeq2Seq
+
+MODEL_CLASSES = {'roberta': (RobertaConfig, RobertaModel, RobertaTokenizer),
+                 'bert': (BertConfig, BertModel, BertTokenizer)}
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
@@ -67,16 +66,15 @@ def read_examples(query_file, question_file):
     """Read examples from filename."""
     examples = []
     with open(query_file, encoding="utf-8") as query_f:
-      with open(question_file, encoding='utf-8') as question_f:
-        for idx, data in enumerate(zip(query_f, question_f)):
-          query, question = data
-          examples.append(
-              Example(
-                  idx=idx,
-                  source=question.strip(),
-                  target=query.strip(),
-              )
-          )
+        with open(question_file, encoding='utf-8') as question_f:
+            for idx, (query, question) in enumerate(zip(query_f, question_f)):
+                examples.append(
+                    Example(
+                        idx=idx,
+                        source=question.strip(),
+                        target=query.strip(),
+                    )
+                )
     return examples
 
 
@@ -159,9 +157,11 @@ def set_seed(seed=42):
 def main():
     parser = argparse.ArgumentParser()
 
-    ## Required parameters
+    ## Required parameters  
     parser.add_argument("--model_type", default=None, type=str, required=True,
                         help="Model type: e.g. roberta")
+    parser.add_argument("--model_architecture", default=None, type=str, required=True,
+                        help="Model architecture: e.g. bert2bert, bert2rnd")
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
                         help="Path to pre-trained model: e.g. roberta-base")
     parser.add_argument("--output_dir", default=None, type=str, required=True,
@@ -212,10 +212,6 @@ def main():
                         help="Weight deay if we apply some.")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float,
                         help="Epsilon for Adam optimizer.")
-    parser.add_argument("--label_smoothing", default=0.1, type=float,
-                        help="Label smoothing for CrossEntropyLoss")
-    parser.add_argument("--save_interval", default=0, type=int,
-                        help="Save a checkpoint and eval every N epochs")
     parser.add_argument("--max_grad_norm", default=1.0, type=float,
                         help="Max gradient norm.")
     parser.add_argument("--num_train_epochs", default=3, type=int,
@@ -232,6 +228,8 @@ def main():
                         help="For distributed training: local_rank")
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
+    parser.add_argument('--save_inverval', type=int, default=1,
+                        help="save checkpoint every N epochs")
     # print arguments
     args = parser.parse_args()
     logger.info(args)
@@ -261,13 +259,23 @@ def main():
 
     # budild model
     encoder = model_class.from_pretrained(args.model_name_or_path, config=config)
+    if args.model_architecture == 'bert2rnd':
+        decoder_layer = nn.TransformerDecoderLayer(d_model=config.hidden_size, nhead=config.num_attention_heads)
+        decoder = nn.TransformerDecoder(decoder_layer, num_layers=6)
+        model = Seq2Seq(encoder=encoder, decoder=decoder, config=config,
+                        beam_size=args.beam_size, max_length=args.max_target_length,
+                        sos_id=tokenizer.cls_token_id, eos_id=tokenizer.sep_token_id)
+    elif args.model_architecture == 'bert2bert':
+        decoder_config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
+        decoder_config.is_decoder = True
+        decoder_config.add_cross_attention = True
+        decoder = model_class.from_pretrained(args.model_name_or_path, config=decoder_config)
+        model = BertSeq2Seq(encoder=encoder, decoder=decoder, config=config,
+                            beam_size=args.beam_size, max_length=args.max_target_length,
+                            sos_id=tokenizer.cls_token_id, eos_id=tokenizer.sep_token_id)
+    else:
+        raise Exception("Model architecture is not valid.")
 
-    # Create Transformer decoder
-    decoder_layer = nn.TransformerDecoderLayer(d_model=config.hidden_size, nhead=config.num_attention_heads)
-    decoder = nn.TransformerDecoder(decoder_layer, num_layers=6)
-    model = Seq2Seq(encoder=encoder, decoder=decoder, config=config,
-                    beam_size=args.beam_size, max_length=args.max_target_length,
-                    sos_id=tokenizer.cls_token_id, eos_id=tokenizer.sep_token_id, label_smoothing=args.label_smoothing)
     if args.load_model_path is not None:
         logger.info("reload model from {}".format(args.load_model_path))
         model.load_state_dict(torch.load(args.load_model_path))
@@ -288,7 +296,7 @@ def main():
 
     if args.do_train:
         # Prepare training data loader
-        train_examples = read_examples(args.train_filename + '.sparql', args.train_filename + '.en')
+        train_examples = read_examples(args.train_filename + ".sparql", args.train_filename + ".en")
         train_features = convert_examples_to_features(train_examples, tokenizer, args, stage='train')
         all_source_ids = torch.tensor([f.source_ids for f in train_features], dtype=torch.long)
         all_source_mask = torch.tensor([f.source_mask for f in train_features], dtype=torch.long)
@@ -312,11 +320,11 @@ def main():
              'weight_decay': args.weight_decay},
             {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
+        t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
         optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
         scheduler = get_linear_schedule_with_warmup(optimizer,
-                                                    num_warmup_steps=int(
-                                                        len(train_dataloader) * args.num_train_epochs * 0.1),
-                                                    num_training_steps=len(train_dataloader) * args.num_train_epochs)
+                                                    num_warmup_steps=int(t_total * 0.1),
+                                                    num_training_steps=t_total)
 
         # Start training
         logger.info("***** Running training *****")
@@ -353,75 +361,17 @@ def main():
                     scheduler.step()
                     global_step += 1
 
-            if args.do_eval and (epoch + 1) % args.save_interval == 0:
+            if args.do_eval and (epoch + 1) % args.save_inverval == 0:
                 # Eval model with dev dataset
                 tr_loss = 0
                 nb_tr_examples, nb_tr_steps = 0, 0
                 eval_flag = False
-                if 'dev_loss' in dev_dataset:
-                    eval_examples, eval_data = dev_dataset['dev_loss']
-                else:
-                    eval_examples = read_examples(args.dev_filename + '.sparql', args.dev_filename + '.en')
-                    eval_features = convert_examples_to_features(eval_examples, tokenizer, args, stage='dev')
-                    all_source_ids = torch.tensor([f.source_ids for f in eval_features], dtype=torch.long)
-                    all_source_mask = torch.tensor([f.source_mask for f in eval_features], dtype=torch.long)
-                    all_target_ids = torch.tensor([f.target_ids for f in eval_features], dtype=torch.long)
-                    all_target_mask = torch.tensor([f.target_mask for f in eval_features], dtype=torch.long)
-                    eval_data = TensorDataset(all_source_ids, all_source_mask, all_target_ids, all_target_mask)
-                    dev_dataset['dev_loss'] = eval_examples, eval_data
-                eval_sampler = SequentialSampler(eval_data)
-                eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
-                logger.info("\n***** Running evaluation *****")
-                logger.info("  Num examples = %d", len(eval_examples))
-                logger.info("  Batch size = %d", args.eval_batch_size)
-
-                # Start Evaling model
-                model.eval()
-                eval_loss, tokens_num = 0, 0
-                for batch in eval_dataloader:
-                    batch = tuple(t.to(device) for t in batch)
-                    source_ids, source_mask, target_ids, target_mask = batch
-
-                    with torch.no_grad():
-                        _, loss, num = model(source_ids=source_ids, source_mask=source_mask,
-                                             target_ids=target_ids, target_mask=target_mask)
-                    eval_loss += loss.sum().item()
-                    tokens_num += num.sum().item()
-                # Pring loss of dev dataset
-                model.train()
-                eval_loss = eval_loss / tokens_num
-                result = {'eval_ppl': round(np.exp(eval_loss), 5),
-                          'global_step': global_step + 1,
-                          'train_loss': round(train_loss, 5)}
-                for key in sorted(result.keys()):
-                    logger.info("  %s = %s", key, str(result[key]))
-                logger.info("  " + "*" * 20)
-
-                # save last checkpoint
-                last_output_dir = os.path.join(args.output_dir, 'checkpoint-last')
-                if not os.path.exists(last_output_dir):
-                    os.makedirs(last_output_dir)
-                model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
-                output_model_file = os.path.join(last_output_dir, "pytorch_model.bin")
-                torch.save(model_to_save.state_dict(), output_model_file)
-                if eval_loss < best_loss:
-                    logger.info("  Best ppl:%s", round(np.exp(eval_loss), 5))
-                    logger.info("  " + "*" * 20)
-                    best_loss = eval_loss
-                    # Save best checkpoint for best ppl
-                    output_dir = os.path.join(args.output_dir, 'checkpoint-best-ppl')
-                    if not os.path.exists(output_dir):
-                        os.makedirs(output_dir)
-                    model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
-                    output_model_file = os.path.join(output_dir, "pytorch_model.bin")
-                    torch.save(model_to_save.state_dict(), output_model_file)
-
-                    # Calculate bleu
+                # Calculate bleu
                 if 'dev_bleu' in dev_dataset:
                     eval_examples, eval_data = dev_dataset['dev_bleu']
                 else:
-                    eval_examples = read_examples(args.dev_filename + '.sparql', args.dev_filename + '.en')
+                    eval_examples = read_examples(args.dev_filename + ".sparql", args.dev_filename + ".en")
                     eval_examples = random.sample(eval_examples, min(1000, len(eval_examples)))
                     eval_features = convert_examples_to_features(eval_examples, tokenizer, args, stage='test')
                     all_source_ids = torch.tensor([f.source_ids for f in eval_features], dtype=torch.long)
@@ -448,21 +398,34 @@ def main():
                             p.append(text)
                 model.train()
                 predictions = []
+                pred_str = []
+                label_str = []
                 with open(os.path.join(args.output_dir, "dev.output"), 'w') as f, open(
                         os.path.join(args.output_dir, "dev.gold"), 'w') as f1:
                     for ref, gold in zip(p, eval_examples):
+                        ref = ref.strip().replace('< ', '<').replace(' >', '>')
+                        ref = re.sub(r' ?([!"#$%&\'(’)*+,-./:;=?@\\^_`{|}~]) ?', r'\1', ref)
+                        ref = ref.replace('attr_close>', 'attr_close >').replace('_attr_open', '_ attr_open')
+                        ref = ref.replace(' [ ', ' [').replace(' ] ', '] ')
+                        ref = ref.replace('_obd_', ' _obd_ ').replace('_oba_', ' _oba_ ')
+
+                        pred_str.append(ref.split())
+                        label_str.append([gold.target.strip().split()])
                         predictions.append(str(gold.idx) + '\t' + ref)
                         f.write(str(gold.idx) + '\t' + ref + '\n')
                         f1.write(str(gold.idx) + '\t' + gold.target + '\n')
 
+                bl_score = corpus_bleu(label_str, pred_str) * 100
+
                 (goldMap, predictionMap) = bleu.computeMaps(predictions, os.path.join(args.output_dir, "dev.gold"))
                 dev_bleu = round(bleu.bleuFromMaps(goldMap, predictionMap)[0], 2)
-                logger.info("  %s = %s " % ("bleu-4", str(dev_bleu)))
+                logger.info("  %s = %s " % ("split bleu-4", str(dev_bleu)))
+                logger.info("  %s = %s " % ("token-based bleu4", str(round(bl_score, 4))))
                 logger.info("  " + "*" * 20)
-                if dev_bleu > best_bleu:
-                    logger.info("  Best bleu:%s", dev_bleu)
+                if bl_score > best_bleu:
+                    logger.info("  Best bleu:%s", bl_score)
                     logger.info("  " + "*" * 20)
-                    best_bleu = dev_bleu
+                    best_bleu = bl_score
                     # Save best checkpoint for best bleu
                     output_dir = os.path.join(args.output_dir, 'checkpoint-best-bleu')
                     if not os.path.exists(output_dir):
@@ -474,12 +437,12 @@ def main():
     if args.do_test:
         files = []
         if args.dev_filename is not None:
-            files.append((args.dev_filename + '.sparql', args.dev_filename + '.en'))
+            files.append(args.dev_filename)
         if args.test_filename is not None:
-            files.append((args.test_filename + '.sparql', args.test_filename + '.en'))
+            files.append(args.test_filename)
         for idx, file in enumerate(files):
             logger.info("Test file: {}".format(file))
-            eval_examples = read_examples(file)
+            eval_examples = read_examples(file + ".sparql", file + ".en")
             eval_features = convert_examples_to_features(eval_examples, tokenizer, args, stage='test')
             all_source_ids = torch.tensor([f.source_ids for f in eval_features], dtype=torch.long)
             all_source_mask = torch.tensor([f.source_mask for f in eval_features], dtype=torch.long)
@@ -505,17 +468,29 @@ def main():
                         p.append(text)
             model.train()
             predictions = []
+            pred_str = []
+            label_str = []
             with open(os.path.join(args.output_dir, "test_{}.output".format(str(idx))), 'w') as f, open(
                     os.path.join(args.output_dir, "test_{}.gold".format(str(idx))), 'w') as f1:
                 for ref, gold in zip(p, eval_examples):
+                    ref = ref.strip().replace('< ', '<').replace(' >', '>')
+                    ref = re.sub(r' ?([!"#$%&\'(’)*+,-./:;=?@\\^_`{|}~]) ?', r'\1', ref)
+                    ref = ref.replace('attr_close>', 'attr_close >').replace('_attr_open', '_ attr_open')
+                    ref = ref.replace(' [ ', ' [').replace(' ] ', '] ')
+                    ref = ref.replace('_obd_', ' _obd_ ').replace('_oba_', ' _oba_ ')
+
+                    pred_str.append(ref.split())
+                    label_str.append([gold.target.strip().split()])
                     predictions.append(str(gold.idx) + '\t' + ref)
                     f.write(str(gold.idx) + '\t' + ref + '\n')
                     f1.write(str(gold.idx) + '\t' + gold.target + '\n')
 
+            bl_score = corpus_bleu(label_str, pred_str) * 100
             (goldMap, predictionMap) = bleu.computeMaps(predictions,
                                                         os.path.join(args.output_dir, "test_{}.gold".format(idx)))
             dev_bleu = round(bleu.bleuFromMaps(goldMap, predictionMap)[0], 2)
-            logger.info("  %s = %s " % ("bleu-4", str(dev_bleu)))
+            logger.info("  %s = %s " % ("split bleu-4", str(dev_bleu)))
+            logger.info("  %s = %s " % ("token-based bleu4", str(round(bl_score, 4))))
             logger.info("  " + "*" * 20)
 
 

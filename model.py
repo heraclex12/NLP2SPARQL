@@ -8,6 +8,126 @@ from torch.autograd import Variable
 import copy
 
 
+class LabelSmoothingLoss(nn.Module):
+    def __init__(self, classes, smoothing=0.0, dim=-1):
+        super(LabelSmoothingLoss, self).__init__()
+        self.confidence = 1.0 - smoothing
+        self.smoothing = smoothing
+        self.cls = classes
+        self.dim = dim
+
+    def forward(self, pred, target):
+        pred = pred.log_softmax(dim=self.dim)
+        with torch.no_grad():
+            true_dist = torch.zeros_like(pred)
+            true_dist.fill_(self.smoothing / (self.cls - 1))
+            true_dist.scatter_(1, target.data.unsqueeze(1), self.confidence)
+        return torch.mean(torch.sum(-true_dist * pred, dim=self.dim))
+
+
+class BertSeq2Seq(nn.Module):
+    """
+        Build Seqence-to-Sequence.
+
+        Parameters:
+
+        * `encoder`- encoder of seq2seq model. e.g. bert
+        * `decoder`- decoder of seq2seq model. e.g. bert
+        * `config`- configuration of encoder model.
+        * `beam_size`- beam size for beam search.
+        * `max_length`- max length of target for beam search.
+        * `sos_id`- start of symbol ids in target for beam search.
+        * `eos_id`- end of symbol ids in target for beam search.
+    """
+
+    def __init__(self, encoder, decoder, config, beam_size=None, max_length=None, sos_id=None, eos_id=None):
+        super(BertSeq2Seq, self).__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+        self.config = config
+        self.register_buffer("bias", torch.tril(torch.ones(2048, 2048)))
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lsm = nn.LogSoftmax(dim=-1)
+        self.tie_weights()
+
+        self.beam_size = beam_size
+        self.max_length = max_length
+        self.sos_id = sos_id
+        self.eos_id = eos_id
+
+    def _tie_or_clone_weights(self, first_module, second_module):
+        """ Tie or clone module weights depending of weither we are using TorchScript or not
+        """
+        if self.config.torchscript:
+            first_module.weight = nn.Parameter(second_module.weight.clone())
+        else:
+            first_module.weight = second_module.weight
+
+    def tie_weights(self):
+        """ Make sure we are sharing the input and output embeddings.
+            Export to TorchScript can't handle parameter sharing so we are cloning them instead.
+        """
+        self._tie_or_clone_weights(self.lm_head,
+                                   self.encoder.embeddings.word_embeddings)
+
+    def forward(self, source_ids=None, source_mask=None, target_ids=None, target_mask=None, args=None):
+        outputs = self.encoder(source_ids, attention_mask=source_mask)
+        encoder_output = outputs[0]
+        if target_ids is not None:
+            out = self.decoder(input_ids=target_ids,
+                               attention_mask=target_mask,
+                               encoder_hidden_states=encoder_output,
+                               encoder_attention_mask=source_mask)
+            hidden_states = torch.tanh(self.dense(out[0]))
+            lm_logits = self.lm_head(hidden_states)
+            # Shift so that tokens < n predict n
+            active_loss = target_mask[..., 1:].ne(0).view(-1) == 1
+            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_labels = target_ids[..., 1:].contiguous()
+            # Flatten the tokens
+            loss_fct = LabelSmoothingLoss(self.config.vocab_size, smoothing=0.1)
+            # loss_fct = nn.CrossEntropyLoss(ignore_index=-1)
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1))[active_loss],
+                            shift_labels.view(-1)[active_loss])
+
+            outputs = loss, loss * active_loss.sum(), active_loss.sum()
+            return outputs
+        else:
+            # Predict
+            preds = []
+            zero = torch.cuda.LongTensor(1).fill_(0)
+            for i in range(source_ids.shape[0]):
+                context = encoder_output[i:i + 1, :]
+                context_mask = source_mask[i:i + 1, :]
+                beam = Beam(self.beam_size, self.sos_id, self.eos_id)
+                input_ids = beam.getCurrentState()
+                context = context.repeat(self.beam_size, 1, 1)
+                context_mask = context_mask.repeat(self.beam_size, 1)
+                for _ in range(self.max_length):
+                    if beam.done():
+                        break
+
+                    attn_mask = input_ids > 0
+                    out = self.decoder(input_ids=input_ids,
+                                       attention_mask=attn_mask,
+                                       encoder_hidden_states=context,
+                                       encoder_attention_mask=context_mask)
+                    hidden_states = torch.tanh(self.dense(out[0]))[:, -1, :]
+                    out = self.lsm(self.lm_head(hidden_states)).data
+                    beam.advance(out)
+                    input_ids.data.copy_(input_ids.data.index_select(0, beam.getCurrentOrigin()))
+                    input_ids = torch.cat((input_ids, beam.getCurrentState()), -1)
+                hyp = beam.getHyp(beam.getFinal())
+                pred = beam.buildTargetTokens(hyp)[:self.beam_size]
+                pred = [torch.cat([x.view(-1) for x in p] + [zero] * (self.max_length - len(p))).view(1, -1) for p in
+                        pred]
+                preds.append(torch.cat(pred, 0).unsqueeze(0))
+
+            preds = torch.cat(preds, 0)
+            return preds
+
+
 class Seq2Seq(nn.Module):
     """
         Build Seqence-to-Sequence.
@@ -70,7 +190,7 @@ class Seq2Seq(nn.Module):
             shift_labels = target_ids[..., 1:].contiguous()
             # Flatten the tokens
             # loss_fct = nn.CrossEntropyLoss(ignore_index=-1)
-            loss_fct = LabelSmoothingCrossEntropy(epsilon=self.label_smoothing)
+            loss_fct = LabelSmoothingLoss(self.config.vocab_size, smoothing=0.1)
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1))[active_loss],
                             shift_labels.view(-1)[active_loss])
 
@@ -108,28 +228,6 @@ class Seq2Seq(nn.Module):
 
             preds = torch.cat(preds, 0)
             return preds
-
-
-def linear_combination(x, y, epsilon):
-    return epsilon * x + (1 - epsilon) * y
-
-
-def reduce_loss(loss, reduction='mean'):
-    return loss.mean() if reduction == 'mean' else loss.sum() if reduction == 'sum' else loss
-
-
-class LabelSmoothingCrossEntropy(nn.Module):
-    def __init__(self, epsilon: float = 0.1, reduction='mean'):
-        super().__init__()
-        self.epsilon = epsilon
-        self.reduction = reduction
-
-    def forward(self, preds, target):
-        n = preds.size()[-1]
-        log_preds = F.log_softmax(preds, dim=-1)
-        loss = reduce_loss(-log_preds.sum(dim=-1), self.reduction)
-        nll = F.nll_loss(log_preds, target, reduction=self.reduction)
-        return linear_combination(loss / n, nll, self.epsilon)
 
 
 class Beam(object):
