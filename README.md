@@ -24,7 +24,7 @@
     <br />
 
 <!-- ABOUT THE PROJECT -->
-In this project, we provide the code for reproducing the experiments in [our paper](#). SPBERT is a BERT-based language model pre-trained on massive SPARQL query logs. SPBERT can learn general-purpose representations in both natural language and SPARQL query language and make the most of the sequential order of words that are crucial for structured language like SPARQL.
+In this project, we provide the code for reproducing the experiments in [our paper](https://arxiv.org/abs/2106.09997). SPBERT is a BERT-based language model pre-trained on massive SPARQL query logs. SPBERT can learn general-purpose representations in both natural language and SPARQL query language and make the most of the sequential order of words that are crucial for structured language like SPARQL.
 
 ### Prerequisites
 
@@ -49,9 +49,18 @@ We release three versions of pre-trained weights. Pre-training was based on the 
 
 <!-- CONTACT -->
 ## Contact
-Coming Soon
+Email: [heraclex12@gmail.com](mailto:heraclex12@gmail.com) - Hieu Tran
 
 
 ## Citation
-Coming Soon
+```
+@misc{tran2021spbert,
+      title={SPBERT: Pre-training BERT on SPARQL Queries for End-to-end Question Answering over Knowledge Graphs}, 
+      author={Hieu Tran and Long Phan and Truong-Son Nguyen},
+      year={2021},
+      eprint={2106.09997},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL}
+}
+```
 
