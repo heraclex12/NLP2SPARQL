@@ -75,7 +75,8 @@ To evaluate models:
 python run.py \
         --do_test \
         --model_type bert \
-        --model_name_or_path bert-base-cased \
+        --encoder_model_name_or_path bert-base-cased \
+        --decoder_model_name_or_path sparql-mlm-scratch \
         --load_model_path ./checkpoint-best-bleu/pytorch_model.bin \
         --dev_filename ./LCQUAD/dev \
         --test_filename ./LCQUAD/test \
