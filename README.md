@@ -45,7 +45,7 @@ We release three versions of pre-trained weights. Pre-training was based on the 
 | MLM+WSO  | SPBERT (BERT-initialized) | 200k | [Here](#) |
 
 ### Datasets
-All evaluation datasets can download [here](https://drive.google.com/drive/folders/1m_pJ0prUDpCWAFuxlvp_S48hGG_AASjb?usp=sharing)
+All evaluation datasets can download [here](https://drive.google.com/drive/folders/1m_pJ0prUDpCWAFuxlvp_S48hGG_AASjb?usp=sharing).
 
 ### Example
 To fine-tune models:
@@ -72,7 +72,7 @@ python run.py \
 
 To evaluate models:
 ```bash
-!python run.py \
+python run.py \
         --do_test \
         --model_type bert \
         --model_name_or_path bert-base-cased \
