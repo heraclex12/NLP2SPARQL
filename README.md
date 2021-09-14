@@ -40,9 +40,9 @@ $ pip install -r requirements.txt
 We release three versions of pre-trained weights. Pre-training was based on the [original BERT code](https://github.com/google-research/bert) provided by Google, and training details are described in our paper. You can download all versions from the table below:
 | Pre-training objective | Model | Steps | Link |
 |---|:---:|:---:|:---:|
-| MLM  | SPBERT (scratch) | 200k | [Here](#) |
-| MLM  | SPBERT (BERT-initialized) | 200k | [Here](#) |
-| MLM+WSO  | SPBERT (BERT-initialized) | 200k | [Here](#) |
+| MLM  | SPBERT (scratch) | 200k | 🤗 [razent/spbert-mlm-zero](https://huggingface.co/razent/spbert-mlm-zero) |
+| MLM  | SPBERT (BERT-initialized) | 200k | 🤗 [razent/spbert-mlm-base](https://huggingface.co/razent/spbert-mlm-base) |
+| MLM+WSO  | SPBERT (BERT-initialized) | 200k | 🤗 [razent/spbert-mlm-wso-base](https://huggingface.co/razent/spbert-mlm-wso-base) |
 
 ### Datasets
 All evaluation datasets can download [here](https://drive.google.com/drive/folders/1m_pJ0prUDpCWAFuxlvp_S48hGG_AASjb?usp=sharing).
