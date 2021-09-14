@@ -37,7 +37,6 @@ from tqdm import tqdm
 from transformers import (AdamW, get_linear_schedule_with_warmup,
                           RobertaConfig, RobertaModel, RobertaTokenizer, BertConfig, BertModel, BertTokenizer)
 
-import bleu
 from model import Seq2Seq, BertSeq2Seq
 
 MODEL_CLASSES = {'roberta': (RobertaConfig, RobertaModel, RobertaTokenizer),
@@ -162,7 +161,9 @@ def main():
                         help="Model type: e.g. roberta")
     parser.add_argument("--model_architecture", default=None, type=str, required=True,
                         help="Model architecture: e.g. bert2bert, bert2rnd")
-    parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
+    parser.add_argument("--encoder_model_name_or_path", default=None, type=str, required=True,
+                        help="Path to pre-trained model: e.g. roberta-base")
+    parser.add_argument("--decoder_model_name_or_path", default=None, type=str, required=True,
                         help="Path to pre-trained model: e.g. roberta-base")
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model predictions and checkpoints will be written.")
@@ -175,6 +176,10 @@ def main():
                         help="The dev filename. Should contain the .jsonl files for this task.")
     parser.add_argument("--test_filename", default=None, type=str,
                         help="The test filename. Should contain the .jsonl files for this task.")
+    parser.add_argument("--source", default="sparql", type=str,
+                        help="The source language (for file extension)")
+    parser.add_argument("--target", default="en", type=str,
+                        help="The target language (for file extension)")
 
     parser.add_argument("--config_name", default="", type=str,
                         help="Pretrained config name or path if not the same as model_name")
@@ -253,12 +258,12 @@ def main():
         os.makedirs(args.output_dir)
 
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
-    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
-    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+    config = config_class.from_pretrained(args.config_name if args.config_name else args.encoder_model_name_or_path)
+    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.encoder_model_name_or_path,
                                                 do_lower_case=args.do_lower_case)
 
     # budild model
-    encoder = model_class.from_pretrained(args.model_name_or_path, config=config)
+    encoder = model_class.from_pretrained(args.encoder_model_name_or_path, config=config)
     if args.model_architecture == 'bert2rnd':
         decoder_layer = nn.TransformerDecoderLayer(d_model=config.hidden_size, nhead=config.num_attention_heads)
         decoder = nn.TransformerDecoder(decoder_layer, num_layers=6)
@@ -266,10 +271,10 @@ def main():
                         beam_size=args.beam_size, max_length=args.max_target_length,
                         sos_id=tokenizer.cls_token_id, eos_id=tokenizer.sep_token_id)
     elif args.model_architecture == 'bert2bert':
-        decoder_config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
+        decoder_config = config_class.from_pretrained(args.config_name if args.config_name else args.decoder_model_name_or_path)
         decoder_config.is_decoder = True
         decoder_config.add_cross_attention = True
-        decoder = model_class.from_pretrained(args.model_name_or_path, config=decoder_config)
+        decoder = model_class.from_pretrained(args.decoder_model_name_or_path, config=decoder_config)
         model = BertSeq2Seq(encoder=encoder, decoder=decoder, config=config,
                             beam_size=args.beam_size, max_length=args.max_target_length,
                             sos_id=tokenizer.cls_token_id, eos_id=tokenizer.sep_token_id)
@@ -296,7 +301,7 @@ def main():
 
     if args.do_train:
         # Prepare training data loader
-        train_examples = read_examples(args.train_filename + ".sparql", args.train_filename + ".en")
+        train_examples = read_examples(args.train_filename + "." + args.source, args.train_filename + "." + args.target)
         train_features = convert_examples_to_features(train_examples, tokenizer, args, stage='train')
         all_source_ids = torch.tensor([f.source_ids for f in train_features], dtype=torch.long)
         all_source_mask = torch.tensor([f.source_mask for f in train_features], dtype=torch.long)
@@ -371,7 +376,7 @@ def main():
                 if 'dev_bleu' in dev_dataset:
                     eval_examples, eval_data = dev_dataset['dev_bleu']
                 else:
-                    eval_examples = read_examples(args.dev_filename + ".sparql", args.dev_filename + ".en")
+                    eval_examples = read_examples(args.dev_filename  + "." + args.source, args.dev_filename + "." + args.target)
                     eval_examples = random.sample(eval_examples, min(1000, len(eval_examples)))
                     eval_features = convert_examples_to_features(eval_examples, tokenizer, args, stage='test')
                     all_source_ids = torch.tensor([f.source_ids for f in eval_features], dtype=torch.long)
@@ -417,10 +422,7 @@ def main():
 
                 bl_score = corpus_bleu(label_str, pred_str) * 100
 
-                (goldMap, predictionMap) = bleu.computeMaps(predictions, os.path.join(args.output_dir, "dev.gold"))
-                dev_bleu = round(bleu.bleuFromMaps(goldMap, predictionMap)[0], 2)
-                logger.info("  %s = %s " % ("split bleu-4", str(dev_bleu)))
-                logger.info("  %s = %s " % ("token-based bleu4", str(round(bl_score, 4))))
+                logger.info("  %s = %s " % ("BLEU", str(round(bl_score, 4))))
                 logger.info("  " + "*" * 20)
                 if bl_score > best_bleu:
                     logger.info("  Best bleu:%s", bl_score)
@@ -442,7 +444,7 @@ def main():
             files.append(args.test_filename)
         for idx, file in enumerate(files):
             logger.info("Test file: {}".format(file))
-            eval_examples = read_examples(file + ".sparql", file + ".en")
+            eval_examples = read_examples(file + "." + args.source, file + "." + args.target)
             eval_features = convert_examples_to_features(eval_examples, tokenizer, args, stage='test')
             all_source_ids = torch.tensor([f.source_ids for f in eval_features], dtype=torch.long)
             all_source_mask = torch.tensor([f.source_mask for f in eval_features], dtype=torch.long)
@@ -486,11 +488,7 @@ def main():
                     f1.write(str(gold.idx) + '\t' + gold.target + '\n')
 
             bl_score = corpus_bleu(label_str, pred_str) * 100
-            (goldMap, predictionMap) = bleu.computeMaps(predictions,
-                                                        os.path.join(args.output_dir, "test_{}.gold".format(idx)))
-            dev_bleu = round(bleu.bleuFromMaps(goldMap, predictionMap)[0], 2)
-            logger.info("  %s = %s " % ("split bleu-4", str(dev_bleu)))
-            logger.info("  %s = %s " % ("token-based bleu4", str(round(bl_score, 4))))
+            logger.info("  %s = %s " % ("BLEU", str(round(bl_score, 4))))
             logger.info("  " + "*" * 20)
 
 
