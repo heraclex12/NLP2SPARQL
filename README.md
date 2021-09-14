@@ -55,7 +55,9 @@ python run.py \
         --do_eval \
         --model_type bert \
         --encoder_model_name_or_path bert-base-cased \
-        --decoder_model_name_or_path sparql-mlm-scratch \
+        --decoder_model_name_or_path sparql-mlm-zero \
+        --source sparql \
+        --target en \
         --train_filename ./LCQUAD/train \
         --dev_filename ./LCQUAD/dev \
         --output_dir ./ \
@@ -76,7 +78,9 @@ python run.py \
         --do_test \
         --model_type bert \
         --encoder_model_name_or_path bert-base-cased \
-        --decoder_model_name_or_path sparql-mlm-scratch \
+        --decoder_model_name_or_path sparql-mlm-zero \
+        --source sparql \
+        --target en \
         --load_model_path ./checkpoint-best-bleu/pytorch_model.bin \
         --dev_filename ./LCQUAD/dev \
         --test_filename ./LCQUAD/test \
