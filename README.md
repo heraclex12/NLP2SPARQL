@@ -54,6 +54,7 @@ python run.py \
         --do_train \
         --do_eval \
         --model_type bert \
+        --model_architecture bert2bert \
         --encoder_model_name_or_path bert-base-cased \
         --decoder_model_name_or_path sparql-mlm-zero \
         --source sparql \
@@ -77,6 +78,7 @@ To evaluate models:
 python run.py \
         --do_test \
         --model_type bert \
+        --model_architecture bert2bert \
         --encoder_model_name_or_path bert-base-cased \
         --decoder_model_name_or_path sparql-mlm-zero \
         --source sparql \
