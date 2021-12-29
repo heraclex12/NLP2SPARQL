@@ -100,13 +100,11 @@ Email: [heraclex12@gmail.com](mailto:heraclex12@gmail.com) - Hieu Tran
 
 ## Citation
 ```
-@misc{tran2021spbert,
-      title={SPBERT: An Efficient Pre-training BERT on SPARQL Queries for Question Answering over Knowledge Graphs}, 
-      author={Hieu Tran and Long Phan and James Anibal and Binh T. Nguyen and Truong-Son Nguyen},
-      year={2021},
-      eprint={2106.09997},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL}
+@inproceedings{Tran2021SPBERTAE,
+  title={SPBERT: An Efficient Pre-training BERT on SPARQL Queries for Question Answering over Knowledge Graphs},
+  author={Hieu Tran and Long Phan and James T. Anibal and Binh Thanh Nguyen and Truong-Son Nguyen},
+  booktitle={ICONIP},
+  year={2021}
 }
 ```
 
