@@ -61,17 +61,17 @@ class Example(object):
         self.target = target
 
 
-def read_examples(query_file, question_file):
+def read_examples(source_file, target_file):
     """Read examples from filename."""
     examples = []
-    with open(query_file, encoding="utf-8") as query_f:
-        with open(question_file, encoding='utf-8') as question_f:
-            for idx, (query, question) in enumerate(zip(query_f, question_f)):
+    with open(source_file, encoding="utf-8") as sf:
+        with open(target_file, encoding='utf-8') as tf:
+            for idx, (s, t) in enumerate(zip(sf, tf)):
                 examples.append(
                     Example(
                         idx=idx,
-                        source=question.strip(),
-                        target=query.strip(),
+                        source=s.strip(),
+                        target=t.strip(),
                     )
                 )
     return examples
